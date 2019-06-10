@@ -1,8 +1,9 @@
 package process
 package examples
 
-import cats.effect._
 import cats.implicits._
+import cats.effect._
+
 import doodle.core._
 import doodle.syntax._
 import doodle.image._
@@ -26,7 +27,7 @@ object Numbers {
 }
 
 /** Simple process with no interaction between the elements. */
-object BasicProcess extends IOApp {
+object BasicProcess  extends IOApp {
 
   import Numbers._
 
@@ -95,7 +96,7 @@ object BasicProcess extends IOApp {
       (position - Point.zero).angle
 
     val squiggles: IO[Image] =
-      (0 to 500).toList.traverse {_ =>
+      (0 to 500).toList.parTraverse {_ =>
         val a: IO[Image] = for {
           pt <- initialPosition
           angle = initialDirection(pt)
@@ -110,5 +111,4 @@ object BasicProcess extends IOApp {
 
     go.map(_ => ExitCode.Success)
   }
-
 }
