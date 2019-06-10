@@ -23,7 +23,7 @@ Examples:
 
 Reasoning. Understandability. Comprensibility.
 
-```(scala)
+```scala
 final case class Fsm[S,E](f: (S, E) => S) {
 }
 
