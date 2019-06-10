@@ -1,6 +1,7 @@
 package process
 package examples
 
+import cats.effect._
 import cats.implicits._
 import doodle.core._
 import doodle.syntax._
@@ -51,48 +52,64 @@ object BasicProcess extends App {
     }
 
   /** Execute one step of the FSM */
-  def step(state: State): State = {
-    val choice = Random.nextDouble()
-    fsm(state, choice)
-  }
+  def step(state: State): IO[State] = randomDouble.map(r => fsm(state, r))
 
   /** Execute count steps of the FSM */
-  def iterate(count: Int, state: State): State = {
-    if(count == 0) state
+  def iterate(count: Int, state: State): IO[State] = {
+    if(count == 0) IO.pure(state)
     else {
-      iterate(count - 1, step(state))
+      step(state).flatMap( s => iterate(count - 1, s))
     }
   }
 
-  def randomColor(): Color =
+  private def randomDouble: IO[Double] = IO {
+    Random.nextDouble()
+  }
+
+  def randomColor(): IO[Color] = for {
+    r1 <- randomDouble
+    r2 <- randomDouble
+    r3 <- randomDouble
+  } yield
     Color.hsla(
-      (Random.nextDouble() / 3.0 - 0.33).turns, // blues and reds
-      Random.nextDouble() / 2.0 + 0.4, // fairly saturated
-      Random.nextDouble() / 2.0 + 0.4, // fairly light
+      (r1 / 3.0 - 0.33).turns, // blues and reds
+      r2 / 2.0 + 0.4, // fairly saturated
+      r3 / 2.0 + 0.4, // fairly light
       0.7 // Somewhat transparent
     )
 
-  def squiggle(initialState: State): Image =
-    iterate(100, initialState).toImage.strokeWidth(3.0).strokeColor(randomColor())
-
-  def initialPosition(): Point = {
+  def squiggle(initialState: State): IO[Image] =
+    randomColor().flatMap(c => 
+      iterate(100, initialState)
+        .map(s => s.toImage.strokeWidth(3.0).strokeColor(c))
+    )
+    
+  private def nextGaussian: IO[Double] = IO { Random.nextGaussian() }
+  def initialPosition(): IO[Point] = for {
+    r1 <- nextGaussian
+    r2 <- nextGaussian
     // Poisson disk sampling might be more attractive
-    Point(Random.nextGaussian() * 150, Random.nextGaussian() * 150)
-  }
+  } yield Point(r1 * 150, r2 * 150)
 
   def initialDirection(position: Point): Angle =
     (position - Point.zero).angle
 
-  def squiggles(): Image =
-    (0 to 500).map{_ =>
-      val pt = initialPosition()
-      val angle = initialDirection(pt)
-      val state = State(pt, angle, List.empty)
-      squiggle(state)
-    }.toList.allOn
+  def squiggles(): IO[Image] = {
+    val result: IO[List[Image]] = (0 to 500).toList.traverse {_ =>
+      val a: IO[Image] = for { 
+        pt <- initialPosition()
+        angle = initialDirection(pt)
+        state = State(pt, angle, List.empty)
+        r <- squiggle(state)
+      } yield r
+      a
+    }
+
+    result.map(_.allOn)
+  }
 
   val frame = Frame.fitToPicture().background(Color.black)
-  def go() = squiggles().draw(frame)
+  def go() = squiggles().map(_.draw(frame))
 
-  go()
+  go().unsafeRunSync()
 }
