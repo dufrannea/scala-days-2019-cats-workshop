@@ -15,15 +15,15 @@ import scala.util.Random
 object Numbers {
   val randomDouble: IO[Double] = IO { Random.nextDouble() }
   val nextGaussian: IO[Double] = IO { Random.nextGaussian() }
-  val randomColor: IO[Color] = (randomDouble, randomDouble, randomDouble).tupled.map({
-    case (r1, r2, r3) =>
+  def randomColor(implicit cs: ContextShift[IO]): IO[Color] = (randomDouble, randomDouble, randomDouble).parMapN(
+    (r1, r2, r3) =>
       Color.hsla(
         (r1 / 3.0 - 0.33).turns, // blues and reds
         r2 / 2.0 + 0.4, // fairly saturated
         r3 / 2.0 + 0.4, // fairly light
         0.7 // Somewhat transparent
       )
-  })
+  )
 }
 
 /** Simple process with no interaction between the elements. */
@@ -86,8 +86,8 @@ object BasicProcess  extends IOApp {
           .map(s => s.toImage.strokeWidth(3.0).strokeColor(c))
       )
 
-    val initialPosition: IO[Point] = (nextGaussian, nextGaussian).tupled.map({
-      case (r1, r2) =>
+    val initialPosition: IO[Point] = (nextGaussian, nextGaussian).mapN({
+      (r1, r2) =>
         // Poisson disk sampling might be more attractive
         Point(r1 * 150, r2 * 150)
     })
@@ -95,16 +95,21 @@ object BasicProcess  extends IOApp {
     def initialDirection(position: Point): Angle =
       (position - Point.zero).angle
 
+    val lol = for {
+      _     <- IO(println(s"Computing on ${Thread.currentThread.getName}"))
+      pt    <- initialPosition
+      angle = initialDirection(pt)
+      state = State(pt, angle, List.empty)
+      r     <- squiggle(state)
+    } yield r
+
     val squiggles: IO[Image] =
       (0 to 500).toList.parTraverse {_ =>
-        val a: IO[Image] = for {
-          pt <- initialPosition
-          angle = initialDirection(pt)
-          state = State(pt, angle, List.empty)
-          r <- squiggle(state)
-        } yield r
-        a
+        lol
       }.map(_.allOn)
+
+    // This code would not be running on //
+    // val squiggles2 = lol.replicateA(500).map(_.allOn)
 
     val frame = Frame.fitToPicture().background(Color.black)
     val go: IO[Unit] = squiggles.map(_.draw(frame))
